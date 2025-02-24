@@ -1,0 +1,123 @@
+;
+/*Universidad del Valle de Guatemala
+IE2023: Programación de Microcontroladores
+Autor: Diego Alejandro Ramos Rodas
+Proyecto: Laboratorio no.3
+Hardware: ATMega328P
+Creado: 24-02-2025
+Modificado: 24-02-2025
+Descripción: Implemente un contador hexadecimal de 4 bits utilizando una interrupción del TMR0. La
+interrupción del TMR0 deberá ser entre 5 y 20ms, pero el contador deberá cambiar cada
+1000ms. Muestre el contador con el TMR0 en un display de 7 segmentos, de manera que
+se muestre el conteo en segundos.
+Consideraciones
+- Ambos contadores deben funcionar simultáneamente*/
+
+/////////////Encabezado///////////
+.include "M328PDEF.INC"
+.cseg
+.org 0x0000
+	JMP START
+.org OVF0addr
+	JMP TIMR0_INT
+.def COUNTUNIT = R21
+.def COUNTDEC = R22
+
+////////////STCK PNTR////////////
+START:
+	LDI R16, LOW(RAMEND)
+	OUT SPL, R16
+	LDI R17, HIGH(RAMEND)
+	OUT SPH, R17
+	TABLADEC: .db 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x67
+////////////SETUP////////////////
+SETUP:
+	CLI
+	///TIMER///
+	LDI R16, (1<<CLKPCE)
+	STS CLKPR, R16
+	LDI R16, 0b00000100
+	STS CLKPR, R16
+	LDI R16, (1 << CS01) | (1 << CS00)
+	OUT TCCR0B, R16
+	LDI R16, 100
+	OUT TCNT0, R16
+	//Habilitar interrupciones
+	LDI R16, (1 << TOIE0)
+	STS TIMSK0, R16
+	//SALIDAS//
+	LDI R16, 0b01111111
+	OUT DDRD, R16
+	LDI R16, 0b00001111
+	OUT DDRC, R16
+	LDI R16, 0b00110000
+	OUT PORTC, R16
+	LDI R16, 0b00110000
+	OUT DDRB, R16
+	LDI R17, 0
+	LDI ZH, HIGH(TABLADEC << 1)
+	LDI ZL, LOW(TABLADEC << 1)
+	LPM R18, Z
+	LDI COUNTUNIT, 0
+	LDI COUNTDEC, 0
+	SEI
+
+MAIN_LOOP: 
+	CPI R20, 100   // R20 = 100 luego de 1s
+	BREQ LOOP
+	CPI R27, 0
+	BREQ UNIDADES
+	CPI R27, 1
+	BREQ DECENAS
+	RJMP MAIN_LOOP
+LOOP:
+	LDI R20, 0
+	INC COUNTUNIT
+	CPI COUNTUNIT, 10
+	BREQ LIMITU
+	RJMP MAIN_LOOP
+
+TIMR0_INT:
+	LDI R16, 100
+	OUT TCNT0, R16
+	INC R20
+	RETI
+
+LIMITU: 
+	INC COUNTDEC
+	LDI COUNTUNIT, 0
+	CPI COUNTDEC, 6
+	BREQ LIMITD
+	RJMP MAIN_LOOP
+LIMITD:
+	LDI COUNTUNIT, 0
+	LDI COUNTDEC, 0
+	RJMP MAIN_LOOP
+
+UNIDADES:
+	LDI R28, 0
+	OUT PORTD, R28
+	SBI PORTB, 3
+	CBI PORTB, 4
+	LDI ZH, HIGH(TABLADEC << 1)
+	LDI ZL, LOW(TABLADEC << 1)
+	ADD ZL, COUNTUNIT
+	LPM R18, Z
+	OUT PORTD, R18
+	INC R27
+	ANDI R27, 0x01
+	RJMP MAIN_LOOP
+DECENAS:
+	LDI R28, 0
+	OUT PORTD, R28
+	SBI PORTB, 4
+	CBI PORTB, 3
+	LDI ZH, HIGH(TABLADEC << 1)
+	LDI ZL, LOW(TABLADEC << 1)
+	ADD ZL, COUNTDEC
+	LPM R18, Z
+	OUT PORTD, R18
+	INC R27
+	ANDI R27, 0x01
+	RJMP MAIN_LOOP
+	
